@@ -14,7 +14,7 @@ This library provides unofficial Go clients for [OpenAI API](https://platform.op
 ```
 go get github.com/sashabaranov/go-openai
 ```
-
+Currently, go-openai requires Go version 1.18 or greater.
 
 ### ChatGPT example usage:
 
@@ -554,4 +554,4 @@ These tests send real network traffic to the OpenAI API and may reach rate limit
 OPENAI_TOKEN=XXX go test -v -tags=integration ./api_integration_test.go
 ```
 
-If `OPENAI_TOKEN` environment variables are not available, integration tests will be skipped.
+If the `OPENAI_TOKEN` environment variable is not available, integration tests will be skipped.
