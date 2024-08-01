@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	utils "github.com/sashabaranov/go-openai/internal"
@@ -89,9 +90,9 @@ func withContentType(contentType string) requestOption {
 	}
 }
 
-func withBetaAssistantV1() requestOption {
+func withBetaAssistantVersion(version string) requestOption {
 	return func(args *requestOptions) {
-		args.header.Set("OpenAI-Beta", "assistants=v1")
+		args.header.Set("OpenAI-Beta", fmt.Sprintf("assistants=%s", version))
 	}
 }
 
@@ -129,12 +130,12 @@ func (c *Client) sendRequest(req *http.Request, v Response) error {
 
 	defer res.Body.Close()
 
-	if isFailureStatusCode(res) {
-		return c.handleErrorResp(res)
-	}
-
 	if v != nil {
 		v.SetHeader(res.Header)
+	}
+
+	if isFailureStatusCode(res) {
+		return c.handleErrorResp(res)
 	}
 
 	return decodeResponse(res.Body, v)
@@ -182,7 +183,7 @@ func sendRequestStream[T streamable](client *Client, req *http.Request) (*stream
 func (c *Client) setCommonHeaders(req *http.Request) {
 	// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/reference#authentication
 	// Azure API Key authentication
-	if c.config.APIType == APITypeAzure {
+	if c.config.APIType == APITypeAzure || c.config.APIType == APITypeCloudflareAzure {
 		req.Header.Set(AzureAPIKeyHeader, c.config.authToken)
 	} else if c.config.authToken != "" {
 		// OpenAI or Azure AD authentication
@@ -228,10 +229,13 @@ func (c *Client) fullURL(suffix string, args ...any) string {
 	if c.config.APIType == APITypeAzure || c.config.APIType == APITypeAzureAD {
 		baseURL := c.config.BaseURL
 		baseURL = strings.TrimRight(baseURL, "/")
+		parseURL, _ := url.Parse(baseURL)
+		query := parseURL.Query()
+		query.Add("api-version", c.config.APIVersion)
 		// if suffix is /models change to {endpoint}/openai/models?api-version=2022-12-01
 		// https://learn.microsoft.com/en-us/rest/api/cognitiveservices/azureopenaistable/models/list?tabs=HTTP
 		if containsSubstr([]string{"/models", "/assistants", "/threads", "/files"}, suffix) {
-			return fmt.Sprintf("%s/%s%s?api-version=%s", baseURL, azureAPIPrefix, suffix, c.config.APIVersion)
+			return fmt.Sprintf("%s/%s%s?%s", baseURL, azureAPIPrefix, suffix, query.Encode())
 		}
 		azureDeploymentName := "UNKNOWN"
 		if len(args) > 0 {
@@ -240,13 +244,19 @@ func (c *Client) fullURL(suffix string, args ...any) string {
 				azureDeploymentName = c.config.GetAzureDeploymentByModel(model)
 			}
 		}
-		return fmt.Sprintf("%s/%s/%s/%s%s?api-version=%s",
+		return fmt.Sprintf("%s/%s/%s/%s%s?%s",
 			baseURL, azureAPIPrefix, azureDeploymentsPrefix,
-			azureDeploymentName, suffix, c.config.APIVersion,
+			azureDeploymentName, suffix, query.Encode(),
 		)
 	}
 
-	// c.config.APIType == APITypeOpenAI || c.config.APIType == ""
+	// https://developers.cloudflare.com/ai-gateway/providers/azureopenai/
+	if c.config.APIType == APITypeCloudflareAzure {
+		baseURL := c.config.BaseURL
+		baseURL = strings.TrimRight(baseURL, "/")
+		return fmt.Sprintf("%s%s?api-version=%s", baseURL, suffix, c.config.APIVersion)
+	}
+
 	return fmt.Sprintf("%s%s", c.config.BaseURL, suffix)
 }
 
