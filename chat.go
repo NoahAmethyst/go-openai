@@ -264,6 +264,7 @@ type ToolFunction struct {
 type FunctionDefinition struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	Strict      bool   `json:"strict,omitempty"`
 	// Parameters is an object describing the function.
 	// You can pass json.RawMessage to describe the schema,
 	// or you can pass in a struct which serializes to the proper JSON schema.
@@ -358,7 +359,12 @@ func (c *Client) CreateChatCompletion(
 		return
 	}
 
-	req, err := c.newRequest(ctx, http.MethodPost, c.fullURL(urlSuffix, request.Model), withBody(request))
+	req, err := c.newRequest(
+		ctx,
+		http.MethodPost,
+		c.fullURL(urlSuffix, withModel(request.Model)),
+		withBody(request),
+	)
 	if err != nil {
 		return
 	}
